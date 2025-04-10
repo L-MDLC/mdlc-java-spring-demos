@@ -1,0 +1,96 @@
+services:
+  mongo-replica-set:
+    # MongoDB replica set configuration
+    image: mongo:7.0
+    hostname: mongo-replica-set
+    container_name: mongo-replica-set
+    ports:
+      - "27017:27017"
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--quiet"]
+    networks:
+      - mongo-net
+    volumes:
+      # Mount initialization script to automatically configure the replica set on first start
+      - ./mongodb-replica-init.sh:/docker-entrypoint-initdb.d/mongodb-replica-init.sh
+
+  kafka:
+    # Kafka broker using KRaft mode (controller + broker)
+    image: apache/kafka:latest
+    container_name: kafka
+    hostname: kafka
+    ports:
+      - 9092:9092
+    environment:
+      # Basic Kafka settings
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:29093'
+
+      # Listeners configuration
+      KAFKA_LISTENERS: 'PLAINTEXT://kafka:29092,CONTROLLER://kafka:29093,PLAINTEXT_HOST://0.0.0.0:9092'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT,CONTROLLER:PLAINTEXT'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+
+      # Storage configuration
+      KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs'
+
+      # Allow auto-creation of topics
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+
+      # Cluster ID (required for KRaft mode)
+      CLUSTER_ID: 'ODA3MzJiODcwMzFlNDg5Ng'
+    networks:
+      - mongo-net
+
+  # Kafka Connect service to stream data from MongoDB to external services
+  kafka-connect:
+    depends_on:
+      - kafka
+      - mongo-replica-set
+    image: confluentinc/cp-kafka-connect:latest
+    container_name: kafka-connect
+    ports:
+      - "8083:8083"  # REST API port for Kafka Connect
+    environment:
+      CONNECT_BOOTSTRAP_SERVERS: kafka:29092  # Connect to the Kafka broker
+      CONNECT_REST_PORT: 8083
+      CONNECT_GROUP_ID: "connect-group"  # Consumer group ID for Kafka Connect
+      CONNECT_CONFIG_STORAGE_TOPIC: "connect-configs"  # Topic to store connector configs
+      CONNECT_OFFSET_STORAGE_TOPIC: "connect-offsets"  # Topic to store connector offsets
+      CONNECT_STATUS_STORAGE_TOPIC: "connect-status"  # Topic to store connector status
+      CONNECT_KEY_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"  # Key converter for messages
+      CONNECT_VALUE_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"  # Value converter for messages
+      CONNECT_REST_ADVERTISED_HOST_NAME: "kafka-connect"  # Hostname advertised in the REST API
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 1  # Replication factor for config storage topic
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 1  # Replication factor for offset storage topic
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 1  # Replication factor for status storage topic
+      CONNECT_PLUGIN_PATH: "/usr/share/java,/usr/share/confluent-hub-components,/connectors,/usr/share/filestream-connectors"  # Path for connector plugins
+      CONNECT_PLUGIN_DISCOVERY: "only_scan" # https://kafka.apache.org/documentation.html#connect_plugindiscovery
+
+      # Add environment variables for MongoDB database and collection
+      MONGODB_DATABASE: "testDB"
+      MONGODB_COLLECTION: "testCollection"
+      OUTPUT_FILE: "/data/mongodb-changes.txt"
+      # Add logging configurations
+      # CONNECT_LOG4J_ROOT_LOGLEVEL: "DEBUG"
+      CONNECT_LOG4J_ROOT_LOGLEVEL: "WARN"
+      CONNECT_LOG4J_LOGGERS: "org.apache.kafka.connect=WARN,org.apache.kafka.clients=WARN,org.apache.kafka=WARN,io.confluent=WARN"
+      CONNECT_LOG4J_APPENDER_STDOUT_THRESHOLD: "WARN"
+    volumes:
+      - ./kafka-connect-data:/data
+      - ./kafka-connect-init.sh:/kafka-connect-init.sh
+      - ./build/libs:/connectors
+    networks:
+      - mongo-net
+    # Use the external script for initialization
+    entrypoint: ["/kafka-connect-init.sh"]
+
+# Network configuration
+networks:
+  mongo-net:
+    driver: bridge
