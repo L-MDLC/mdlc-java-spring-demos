@@ -7,8 +7,23 @@ import org.springframework.data.mongodb.core.MongoTemplate;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Set;
 
 public final class MongoReplicaSetAwaiter {
+
+    private static final Set<Integer> TRANSIENT_CODES = Set.of(
+            94,   // NotYetInitialized
+            189   // PrimarySteppedDown
+    );
+
+    private static boolean isTransient(Throwable t) {
+        if (t instanceof MongoCommandException e) {
+            return TRANSIENT_CODES.contains(e.getErrorCode());
+        }
+        // Uncomment only if the test must survive a failover:
+        // return t instanceof MongoSocketException || t instanceof MongoTimeoutException;
+        return false;
+    }
 
     private MongoReplicaSetAwaiter() {}
 
@@ -16,7 +31,7 @@ public final class MongoReplicaSetAwaiter {
         return Awaitility.await("replica set primary election")
                 .atMost(timeout)
                 .pollInterval(Duration.ofMillis(500))
-                .ignoreExceptionsInstanceOf(MongoCommandException.class)
+                .ignoreExceptionsMatching(MongoReplicaSetAwaiter::isTransient)
                 .until(() -> template.getMongoDatabaseFactory()
                                 .getMongoDatabase("admin")
                                 .runCommand(new Document("replSetGetStatus", 1)),
