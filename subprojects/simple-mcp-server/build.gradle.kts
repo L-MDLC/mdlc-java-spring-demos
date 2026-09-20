@@ -6,14 +6,8 @@ plugins {
 
 version = "1.0-SNAPSHOT"
 
-java {
-    toolchain {
-        languageVersion.set(JavaLanguageVersion.of(17))
-    }
-}
-
 dependencies {
-	implementation("org.springframework.ai:spring-ai-mcp-server-webmvc-spring-boot-starter:1.0.0-M6")
+	implementation("org.springframework.ai:spring-ai-starter-mcp-server-webmvc:2.0.1")
 
 	// MongoDB dependencies
 	implementation("org.mongodb:mongodb-driver-sync") // version managed by the Spring Boot BOM
