@@ -68,6 +68,9 @@ services:
           rs.status();
           print("Replica set already initiated");
         } catch (e) {
+          // 94 = NotYetInitialized: the only error that means "go ahead and initiate".
+          // Anything else (network, auth, timeout...) must surface as-is.
+          if (e.code !== 94) throw e;
           printjson(rs.initiate({
             _id: "rs0",
             members: [
