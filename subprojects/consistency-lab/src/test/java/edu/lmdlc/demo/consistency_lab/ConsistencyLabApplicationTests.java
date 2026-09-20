@@ -18,7 +18,7 @@ class ConsistencyLabApplicationTests {
     private MongoTemplate mongoTemplate;
 
 	@Test
-	void replicaSetIsHealthy() {
+	void replicaSetIsCorrectlyDefined() {
         // When
         Document replSetStatus = MongoReplicaSetAwaiter.awaitHealthyPrimary(mongoTemplate, Duration.ofSeconds(10));
 
