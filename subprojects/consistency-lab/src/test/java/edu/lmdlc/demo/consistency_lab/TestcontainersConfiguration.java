@@ -13,13 +13,15 @@ class TestcontainersConfiguration {
 	@Bean
 	@ServiceConnection
 	MongoDBContainer mongoDbContainer() {
-		return new MongoDBContainer(DockerImageName.parse("mongo:latest"));
+        // MongoDB 8.3.11 - The latest stable version available on September 2026
+		return new MongoDBContainer(DockerImageName.parse("mongo:8.3.11")).withReplicaSet();
 	}
 
 	@Bean
 	@ServiceConnection
 	PostgreSQLContainer postgresContainer() {
-		return new PostgreSQLContainer(DockerImageName.parse("postgres:latest"));
+        // Postgres 18.6 - The latest stable version available on September 2026
+        return new PostgreSQLContainer(DockerImageName.parse("postgres:18.6"));
 	}
 
 }
